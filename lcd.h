@@ -1,3 +1,5 @@
+#pragma once
+
 #include <LiquidCrystal.h>
 
 #define LCD_PIN_RS 3

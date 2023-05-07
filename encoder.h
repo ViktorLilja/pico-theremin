@@ -1,3 +1,4 @@
+#pragma once
 
 #define ENC_PIN_A  19
 #define ENC_PIN_B  20

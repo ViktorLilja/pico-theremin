@@ -1,3 +1,5 @@
+#pragma once
+
 #include "RP2040_PWM.h"
 
 #define ANT_PIN_PWM_PITCH     16
@@ -23,8 +25,6 @@ double  ANT_freq_pitch          = 0;
 
 const int    ANT_freq_offset      = 5000; // Working frequency of antennas
 const double ANT_filter_constant  = 0.01;  // Response time will be approx 1/(offset * constant) 
-
-
 
 
 void ANT_setup() {
@@ -60,7 +60,7 @@ void ANT_isr_volume() {
   ANT_period_volume = (1-ANT_filter_constant) * ANT_period_volume + 
                       ANT_filter_constant * (current_micros - ANT_last_micros_volume);
                       
-  ANT_freq_volume = 1e6 / ANT_period_volume;
+  ANT_freq_volume = 1e6 / ANT_period_volume - ANT_zero_freq_volume;
   
   ANT_last_micros_volume = current_micros;
 }
@@ -78,7 +78,7 @@ void ANT_isr_pitch() {
   // Simple low pass filter
   ANT_period_pitch = (1-ANT_filter_constant) * ANT_period_pitch + ANT_filter_constant * (current_micros - ANT_last_micros_pitch);
 
-  ANT_freq_pitch = 1e6 / ANT_period_pitch;
+  ANT_freq_pitch = 1e6 / ANT_period_pitch - ANT_zero_freq_pitch;
   
   ANT_last_micros_pitch = current_micros;
 }
@@ -90,16 +90,16 @@ void ANT_calibrate() {
     delay(2500);
 
     // Update pwm frequency
-    ANT_pwm_freq_volume = ANT_pwm_freq_volume - ANT_freq_volume + ANT_freq_offset;
-    ANT_pwm_freq_pitch  = ANT_pwm_freq_pitch  - ANT_freq_pitch  + ANT_freq_offset;
+    ANT_pwm_freq_volume += -(ANT_freq_volume  + ANT_zero_freq_volume) + ANT_freq_offset;
+    ANT_pwm_freq_pitch  += -(ANT_freq_pitch   + ANT_zero_freq_pitch)  + ANT_freq_offset;
     ANT_pwm_volume->setPWM(ANT_PIN_PWM_VOLUME, ANT_pwm_freq_volume, 50);
     ANT_pwm_pitch->setPWM(ANT_PIN_PWM_PITCH,   ANT_pwm_freq_pitch,  50);
 
     // Wait for new measurement
     delay(500);
     
-    // Set Zero point frequency
-    ANT_zero_freq_volume = ANT_freq_volume;
-    ANT_zero_freq_pitch  = ANT_freq_pitch;
+    // Update zero point frequency
+    ANT_zero_freq_volume += ANT_freq_volume;
+    ANT_zero_freq_pitch  += ANT_freq_pitch;
     
 }
