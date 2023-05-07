@@ -3,11 +3,15 @@
 #include "waveforms.h"
 #include "antenna.h"
 #include "dac.h"
+#include "tones.h"
+#include "effects.h"
 
 // For keeping track of system state
 enum GUI_State {
+  CALIBRATING,
   MENU_DISPLAY,
   MENU_WAVEFORM,  SET_WAVEFORM,
+  MENU_AUTOTUNE
 } GUI_current_state;
 
 void GUI_goto_state(enum GUI_State new_state);
@@ -25,8 +29,9 @@ void GUI_on_step(int steps) {
   switch(GUI_current_state) {
 
     // Scrolling through menu
-    case MENU_DISPLAY:    GUI_goto_state(steps < 0 ? MENU_WAVEFORM  : MENU_WAVEFORM); break;
-    case MENU_WAVEFORM:   GUI_goto_state(steps < 0 ? MENU_DISPLAY    : MENU_DISPLAY); break;
+    case MENU_DISPLAY:    GUI_goto_state(steps < 0 ? MENU_AUTOTUNE : MENU_WAVEFORM); break;
+    case MENU_WAVEFORM:   GUI_goto_state(steps < 0 ? MENU_DISPLAY  : MENU_AUTOTUNE); break;
+    case MENU_AUTOTUNE:   GUI_goto_state(steps < 0 ? MENU_WAVEFORM : MENU_DISPLAY); break;
 
     case SET_WAVEFORM:
       WAVEFORM_step(steps);
@@ -44,10 +49,21 @@ void GUI_on_step(int steps) {
 void GUI_on_click(int clicks) {
   
   switch(GUI_current_state) {
-    case MENU_DISPLAY:    ANT_calibrate();                break;
+    case MENU_DISPLAY:
+      GUI_goto_state(CALIBRATING);
+      ANT_calibrate();    
+      GUI_goto_state(MENU_DISPLAY);            
+      break;
+    
     case MENU_WAVEFORM:   GUI_goto_state(SET_WAVEFORM);   break;
-   
     case SET_WAVEFORM:    GUI_goto_state(MENU_WAVEFORM);  break;
+    
+    case MENU_AUTOTUNE:
+      EFX_autotune = !EFX_autotune;
+      LCD.setCursor(0, 1);
+      if (EFX_autotune) LCD.print("ON ");
+      else LCD.print("OFF");
+      break;
   }
   
 }
@@ -56,14 +72,25 @@ void GUI_on_click(int clicks) {
 void GUI_on_update(double frequency, double volume) {
   switch(GUI_current_state) {
     case MENU_DISPLAY:
-    LCD.setCursor(11, 0);
-    LCD.print("          ");
-    LCD.setCursor(11, 0);
+
+    // Write frequency
+    LCD.setCursor(8, 0);
+    LCD.print("               ");
+    LCD.setCursor(8, 0);
     LCD.print(int(frequency));
     LCD.print("Hz");
-    LCD.setCursor(11, 1);
-    LCD.print("          ");
-    LCD.setCursor(11, 1);
+
+    // Write tone
+    int tone_number = closest_tone(frequency);
+    char name_buffer[8];
+    name_of_tone(name_buffer, tone_number);
+    LCD.setCursor(16, 0);
+    LCD.print(name_buffer);
+
+    // Write volume
+    LCD.setCursor(8, 1);
+    LCD.print("             ");
+    LCD.setCursor(8, 1);
     LCD.print(int(100 * volume));
     LCD.print("%");
   }
@@ -75,9 +102,17 @@ void GUI_goto_state(enum GUI_State new_state) {
 
   switch(GUI_current_state) {
 
+    case CALIBRATING:
+      DAC_volume = 0;
+      LCD.clear();
+      LCD.print("Calibrating...");
+      LCD.setCursor(0, 1);
+      LCD.print("Please stand back.");
+      break;
+
     case MENU_DISPLAY:
       LCD.clear();
-      LCD.print("Frequency:");
+      LCD.print("Freq:");
       LCD.setCursor(0, 1);
       LCD.print("Volume:   ");
       break;
@@ -95,6 +130,14 @@ void GUI_goto_state(enum GUI_State new_state) {
       LCD.setCursor(0, 1);
       LCD.print(">");
       LCD.print(WAVEFORM_label);
+      break;
+
+    case MENU_AUTOTUNE:
+      LCD.clear();
+      LCD.print("Autotune");
+      LCD.setCursor(0, 1);
+      if (EFX_autotune) LCD.print("ON ");
+      else LCD.print("OFF");
       break;
   }
 }

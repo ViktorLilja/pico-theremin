@@ -3,6 +3,7 @@
 #include "antenna.h"
 #include "dac.h"
 #include "gui.h"
+#include "effects.h"
 
 // Second core is only used to run the DAC to avoid audio interruptions.
 void setup1() { DAC_setup(); }
@@ -34,10 +35,12 @@ void loop() {
   }
 
   double volume = ANT_freq_volume / 1000;
+  double frequency = ANT_freq_pitch;
+
+  EFX_apply_effects(&frequency, &volume);
+  
   if (volume < 0) volume = 0;
   if (volume > 1) volume = 1;
-  
-  double frequency = ANT_freq_pitch;
   if (frequency < 20)    frequency = 20;
   if (frequency > 20000) frequency = 20000;
 
@@ -47,7 +50,7 @@ void loop() {
   // Do GUI updates once in a while
   // THIS PART IS PROBLEMATIC - CAUSES SLIGHT GLITCHES IN SOUND
   gui_update_count++;
-  if (gui_update_count > 100000) {
+  if (gui_update_count > 20000) {
     gui_update_count = 0;
     GUI_on_update(frequency, volume);
   }
