@@ -25,7 +25,7 @@ int closest_tone(double frequency) {
 // Returns a string representing the name of a tone
 void name_of_tone(char *name_buffer, int n) {
 
-  char tone_labels[12][3] = {"A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#"};
+  char tone_labels[12][3] = {"A ", "A#", "B ", "C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#"};
 
   int octave = 4 + (n + 10) / 12;
   if (n <= -10) octave--;

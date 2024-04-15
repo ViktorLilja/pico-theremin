@@ -5,10 +5,6 @@
 #include "gui.h"
 #include "effects.h"
 
-// Second core is only used to run the DAC to avoid audio interruptions.
-void setup1() { DAC_setup(); }
-void loop1()  { DAC_write_next(); }
-
 // First core handles all other peripherals
 void setup() {
   LCD_setup();
@@ -17,7 +13,10 @@ void setup() {
   GUI_setup();
 }
 
+int freq_update_count = 0;
 int gui_update_count = 0;
+double volume = 0;
+double frequency = 0;
 void loop() {
   
   // Handle stepping
@@ -34,23 +33,22 @@ void loop() {
     GUI_on_click(clicks);
   }
 
-  double volume = ANT_freq_volume / 1000;
-  double frequency = ANT_freq_pitch;
+  volume = 1.0 - ANT_get_freq_volume() / 1500.0;
+  frequency = ANT_get_freq_pitch() * 0.8;
 
   EFX_apply_effects(&frequency, &volume);
   
   if (volume < 0) volume = 0;
   if (volume > 1) volume = 1;
-  if (frequency < 20)    frequency = 20;
+  if (frequency < 1)    frequency = 1;
   if (frequency > 20000) frequency = 20000;
 
   DAC_set_volume(volume);
   DAC_set_frequency(frequency);
 
-  // Do GUI updates once in a while
-  // THIS PART IS PROBLEMATIC - CAUSES SLIGHT GLITCHES IN SOUND
+  // Do GUI updates about every 100 ms
   gui_update_count++;
-  if (gui_update_count > 20000) {
+  if (gui_update_count > 10000) {
     gui_update_count = 0;
     GUI_on_update(frequency, volume);
   }

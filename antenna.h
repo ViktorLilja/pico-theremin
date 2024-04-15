@@ -2,29 +2,43 @@
 
 #include "RP2040_PWM.h"
 
+// Theremin v1
+/*
 #define ANT_PIN_PWM_PITCH     16
 #define ANT_PIN_SIGNAL_PITCH  17
+#define ANT_BASE_FREQ_PITCH   460000
 #define ANT_PIN_PWM_VOLUME    15
 #define ANT_PIN_SIGNAL_VOLUME 14
+#define ANT_BASE_FREQ_VOLUME  500000
+*/
 
+// Theremin v2
+#define ANT_PIN_PWM_PITCH     17
+#define ANT_PIN_SIGNAL_PITCH  16
+#define ANT_BASE_FREQ_PITCH   570000
+#define ANT_PIN_PWM_VOLUME    14
+#define ANT_PIN_SIGNAL_VOLUME 15
+#define ANT_BASE_FREQ_VOLUME  520000
+
+
+
+const double ANT_freq_offset = 10000; // Working frequency of antennas
+
+// Initialize volume antenna
 RP2040_PWM* ANT_pwm_volume;
 void ANT_isr_volume();
-int     ANT_pwm_freq_volume     = 520000; // Should be roughly 20kHz above antenna oscillation frequency
-int     ANT_last_micros_volume  = 0;
-double  ANT_period_volume       = 0;
-double  ANT_zero_freq_volume    = 20000;
-double  ANT_freq_volume         = 0;
+double             ANT_pwm_freq_volume  = ANT_BASE_FREQ_VOLUME + ANT_freq_offset;
+volatile uint32_t  ANT_micros_volume = 0;
+volatile uint32_t  ANT_period_volume = 0;
+double             ANT_zero_freq_volume = 0;
 
+// Initialize pitch antenna
 RP2040_PWM* ANT_pwm_pitch;
-void ANT_isr_pitch();
-int     ANT_pwm_freq_pitch      = 480000; // Should be roughly 20kHz above antenna oscillation frequency
-int     ANT_last_micros_pitch   = 0;
-double  ANT_period_pitch        = 0;
-double  ANT_zero_freq_pitch     = 24000;
-double  ANT_freq_pitch          = 0;
-
-const int    ANT_freq_offset      = 5000; // Working frequency of antennas
-const double ANT_filter_constant  = 0.01;  // Response time will be approx 1/(offset * constant) 
+void  ANT_isr_pitch();
+double             ANT_pwm_freq_pitch   = ANT_BASE_FREQ_PITCH + ANT_freq_offset;
+volatile uint32_t  ANT_micros_pitch = 0;
+volatile uint32_t  ANT_period_pitch = 0;
+double             ANT_zero_freq_pitch = 0;
 
 
 void ANT_setup() {
@@ -48,58 +62,45 @@ void ANT_setup() {
 
 // Interrupt routine for signals from volume antenna
 void ANT_isr_volume() {
-  int current_micros = micros();
-
-  // Should never oscillate slower than 1kHz
-  if (current_micros - ANT_last_micros_pitch > 1000) {
-    ANT_last_micros_volume = current_micros;
-    return;
-  }
-
-  // Simple low pass filter
-  ANT_period_volume = (1-ANT_filter_constant) * ANT_period_volume + 
-                      ANT_filter_constant * (current_micros - ANT_last_micros_volume);
-                      
-  ANT_freq_volume = 1e6 / ANT_period_volume - ANT_zero_freq_volume;
-  
-  ANT_last_micros_volume = current_micros;
+  uint32_t current_micros = micros();
+  ANT_period_volume += (current_micros-ANT_micros_volume<<16) - (ANT_period_volume>>8);
+  ANT_micros_volume = current_micros;
 }
 
 // Interrupt routine for signals from pitch antenna
 void ANT_isr_pitch() {
-  int current_micros = micros();
-
-  // Should never oscillate slower than 1kHz
-  if (current_micros - ANT_last_micros_pitch > 1000) {
-    ANT_last_micros_pitch = current_micros;
-    return;
-  }
-
-  // Simple low pass filter
-  ANT_period_pitch = (1-ANT_filter_constant) * ANT_period_pitch + ANT_filter_constant * (current_micros - ANT_last_micros_pitch);
-
-  ANT_freq_pitch = 1e6 / ANT_period_pitch - ANT_zero_freq_pitch;
-  
-  ANT_last_micros_pitch = current_micros;
+  uint32_t current_micros = micros();
+  ANT_period_pitch += (current_micros-ANT_micros_pitch<<16) - (ANT_period_pitch>>8);
+  ANT_micros_pitch = current_micros;
 }
 
-// Call this to calibrate the antenna frequencies
-void ANT_calibrate() {
-  
-    // Wait for new measurement
-    delay(2500);
+double ANT_get_freq_volume() {
+  return (65536*256*1e6)/ANT_period_volume - ANT_zero_freq_volume;
+}
 
-    // Update pwm frequency
-    ANT_pwm_freq_volume += -(ANT_freq_volume  + ANT_zero_freq_volume) + ANT_freq_offset;
-    ANT_pwm_freq_pitch  += -(ANT_freq_pitch   + ANT_zero_freq_pitch)  + ANT_freq_offset;
+double ANT_get_freq_pitch() {
+  return (65536*256*1e6)/ANT_period_pitch - ANT_zero_freq_pitch;
+}
+
+void ANT_calibrate() {
+
+    // Reset zero frequency
+    ANT_zero_freq_volume = 0;
+    ANT_zero_freq_pitch = 0;
+ 
+    // Get new measurement
+    delay(500);
+
+    // Update pwm frequency to get desired base frequency
+    ANT_pwm_freq_volume += -ANT_get_freq_volume() + ANT_freq_offset;
+    ANT_pwm_freq_pitch  += -ANT_get_freq_pitch()  + ANT_freq_offset;
     ANT_pwm_volume->setPWM(ANT_PIN_PWM_VOLUME, ANT_pwm_freq_volume, 50);
     ANT_pwm_pitch->setPWM(ANT_PIN_PWM_PITCH,   ANT_pwm_freq_pitch,  50);
 
-    // Wait for new measurement
+    // Get new measurement
     delay(500);
     
     // Update zero point frequency
-    ANT_zero_freq_volume += ANT_freq_volume;
-    ANT_zero_freq_pitch  += ANT_freq_pitch;
-    
+    ANT_zero_freq_volume = ANT_get_freq_volume();
+    ANT_zero_freq_pitch  = ANT_get_freq_pitch();
 }
